@@ -1,0 +1,14 @@
+*.dmp
+*.log
+*.csrc
+*.vvp
+*.vcd
+obj_*
+logs
+
+prj
+.Xil
+
+.cache
+build
+compile_commands.json
