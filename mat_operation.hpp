@@ -92,12 +92,12 @@ template <typename T, size_t row, size_t col>
 void conj_mult(MAT<T, row, col> const& src, MAT<T, col>& result) {
   for (size_t r = 0; r < col; ++r) {
     for (size_t c = 0; c <= r; ++c) {
-      result[r, c] = 0;
-
+      VEC<T, row> tmp_mult;
       for (size_t k = 0; k < row; ++k) {
-        result[r, c] += my_conj(src[k, r]) * src[k, c];
+        tmp_mult[k] = my_conj(src[k, r]) * src[k, c];
       }
 
+      result[r, c] = Qreduce<T>(tmp_mult);
       result[c, r] = my_conj(result[r, c]);
     }
   }
@@ -107,11 +107,12 @@ template <typename T, size_t row1, size_t col1, size_t col2>
 void conj_mult(MAT<T, row1, col1> const& lhs, MAT<T, row1, col2> const& rhs, MAT<T, col1, col2>& result) {
   for (size_t r = 0; r < col1; ++r) {
     for (size_t c = 0; c < col2; ++c) {
-      result[r, c] = 0;
-
+      VEC<T, row1> tmp_mult;
       for (size_t k = 0; k < row1; ++k) {
-        result[r, c] += my_conj(lhs[k, r]) * rhs[k, c];
+        tmp_mult[k] = my_conj(lhs[k, r]) * rhs[k, c];
       }
+
+      result[r, c] = Qreduce<T>(tmp_mult);
     }
   }
 }
@@ -119,11 +120,12 @@ void conj_mult(MAT<T, row1, col1> const& lhs, MAT<T, row1, col2> const& rhs, MAT
 template <typename T, size_t row, size_t col>
 void conj_mult(MAT<T, row, col> const& lhs, VEC<T, row> const& rhs, VEC<T, col>& result) {
   for (size_t r = 0; r < col; ++r) {
-    result[r] = 0;
-
+    VEC<T, row> tmp_mult;
     for (size_t k = 0; k < row; ++k) {
-      result[r] += my_conj(lhs[k, r]) * rhs[k];
+      tmp_mult[k] = my_conj(lhs[k, r]) * rhs[k];
     }
+
+    result[r] = Qreduce<T>(tmp_mult);
   }
 }
 
@@ -131,17 +133,18 @@ template <typename src_t, typename res_t, size_t row, size_t col>
 void conj_mult(MAT<src_t, row, col> const& src, MAT<res_t, col>& result) {
   for (size_t r = 0; r < col; ++r) {
     for (size_t c = 0; c <= r; ++c) {
-      result[r, c] = 0;
+      VEC<res_t, row> tmp_mult;
 
       for (size_t k = 0; k < row; ++k) {
-        result[r, c] += Qmul<BasicComplexMul<acT<typename res_t::realType>,
-                                             bdT<typename res_t::realType>,
-                                             adT<typename res_t::realType>,
-                                             bcT<typename res_t::realType>,
-                                             acbdT<typename res_t::realType>,
-                                             adbcT<typename res_t::realType>>>(my_conj(src[k, r]), src[k, c]);
+        tmp_mult[k] = Qmul<BasicComplexMul<acT<typename res_t::realType>,
+                                           bdT<typename res_t::realType>,
+                                           adT<typename res_t::imagType>,
+                                           bcT<typename res_t::imagType>,
+                                           acbdT<typename res_t::realType>,
+                                           adbcT<typename res_t::imagType>>>(my_conj(src[k, r]), src[k, c]);
       }
 
+      result[r, c] = Qreduce<res_t>(tmp_mult);
       result[c, r] = my_conj(result[r, c]);
     }
   }
@@ -151,11 +154,13 @@ template <typename T, size_t row1, size_t col1, size_t col2>
 void mat_mult(MAT<T, row1, col1> const& lhs, MAT<T, col1, col2> const& rhs, MAT<T, row1, col2>& result) {
   for (size_t r = 0; r < row1; ++r) {
     for (size_t c = 0; c < col2; ++c) {
-      result[r, c] = 0;
+      VEC<T, col1> tmp_mult;
 
       for (size_t k = 0; k < col1; ++k) {
-        result[r, c] += lhs[r, k] * rhs[k, c];
+        tmp_mult[k] = lhs[r, k] * rhs[k, c];
       }
+
+      result[r, c] = Qreduce<T>(tmp_mult);
     }
   }
 }
@@ -163,17 +168,19 @@ void mat_mult(MAT<T, row1, col1> const& lhs, MAT<T, col1, col2> const& rhs, MAT<
 template <typename T, size_t row, size_t col>
 void mat_mult(MAT<T, row, col> const& lhs, VEC<T, col> const& rhs, VEC<T, row>& result) {
   for (size_t r = 0; r < row; ++r) {
-    result[r] = 0;
+    VEC<T, col> tmp_mult;
 
     for (size_t c = 0; c < col; ++c) {
-      result[r] += lhs[r, c] * rhs[c];
+      tmp_mult[c] = lhs[r, c] * rhs[c];
     }
+
+    result[r] = Qreduce<T>(tmp_mult);
   }
 }
 
 // μ(i+1) = b − W * μ(i)
 template <size_t len, typename T>
-void first_order_iter(
+void wNSA_iter(
     MAT<T, len> const& factor, VEC<T, len> const& constant, VEC<T, len> const& init, VEC<T, len>& dest, int iter_num) {
   dest = init;
   MAT<T, len> one{};
