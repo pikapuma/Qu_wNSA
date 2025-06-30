@@ -46,7 +46,7 @@ constexpr size_t Rx            = 64;
 constexpr size_t QAM           = 64;
 constexpr size_t wNSA_ITER_NUM = 25;
 constexpr size_t EPA_ITER_NUM  = 8;
-constexpr size_t test_num      = 2000;
+constexpr size_t test_num      = 20000;
 
 constexpr double SNR = 18;
 constexpr double TxE = Tx * Rx;

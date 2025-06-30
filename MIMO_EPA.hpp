@@ -14,6 +14,7 @@
 static std::mt19937 generator{std::random_device{}()};  // NOLINT
 static std::normal_distribution<double> normal{0, 1};   // NOLINT
 
+// get the average energy of QAM
 template <size_t QAM>
 consteval double get_Es0() {
   if constexpr (QAM == 16) {
@@ -27,19 +28,7 @@ consteval double get_Es0() {
   }
 }
 
-template <size_t QAM>
-consteval int get_symbol_max() {
-  if constexpr (QAM == 16) {
-    return 3;
-  } else if constexpr (QAM == 64) {
-    return 7;
-  } else if constexpr (QAM == 256) {
-    return 15;
-  } else {
-    static_assert(false, "Invalid QAM!");
-  }
-}
-
+// get symbols of QAM
 template <size_t QAM>
 consteval auto get_symbols() {
   if constexpr (QAM == 16) {
@@ -53,6 +42,7 @@ consteval auto get_symbols() {
   }
 }
 
+// get bit sequences(real part) of QAM
 template <size_t QAM>
 auto get_bits_r() {
   if constexpr (QAM == 16) {
@@ -81,6 +71,7 @@ auto get_bits_r() {
   }
 }
 
+// get bit sequences(imag part) of QAM
 template <size_t QAM>
 auto get_bits_i() {
   if constexpr (QAM == 16) {
@@ -109,6 +100,7 @@ auto get_bits_i() {
   }
 }
 
+// consteval function for log2
 template <size_t num>
 consteval size_t log2_floor() {
   size_t res    = 0;
@@ -122,6 +114,7 @@ consteval size_t log2_floor() {
   return res;
 }
 
+// template variables for MIMO configuration
 template <size_t QAM>
 constexpr auto symbols = get_symbols<QAM>();
 
@@ -131,6 +124,7 @@ auto const bits_r = get_bits_r<QAM>();
 template <size_t QAM>
 auto const bits_i = get_bits_i<QAM>();
 
+// get the index of closest symbol in the symbol set
 template <size_t QAM, typename T>
 size_t get_symbol_id(T sym) {
   int const Mc = log2_floor<QAM>();
@@ -150,6 +144,7 @@ size_t get_symbol_id(T sym) {
   return Mc - 1;  // 如果没有找到，返回-1
 }
 
+// symbol to bit sequences
 template <size_t QAM>
 std::string sym2bit(int sym, bool is_real) {
   int id = std::find(symbols<QAM>.begin(), symbols<QAM>.end(), sym);
@@ -161,6 +156,7 @@ std::string sym2bit(int sym, bool is_real) {
   return bits_i<QAM>[id];
 }
 
+// MIMO system, y=H*x+n
 template <size_t Tx, size_t Rx, size_t QAM, typename H_t, typename y_t>
 void MIMO_system(MAT<Qu<H_t, H_t>, Rx, Tx>& H,
                  VEC<Qu<y_t, y_t>, Rx>& y,
@@ -204,6 +200,7 @@ void MIMO_system(MAT<Qu<H_t, H_t>, Rx, Tx>& H,
   }
 }
 
+// The preprocessing unit for EPA-wNSA algorithm
 template <size_t Tx,
           size_t Rx,
           typename H_t,
@@ -275,6 +272,7 @@ void init_params_wNSA(MAT<Qu<H_t, H_t>, Rx, Tx> const& H,
   }
 }
 
+// hard decision function
 template <size_t QAM, typename T>
 inline int hard_decision(T x) {
   size_t id = get_symbol_id<QAM>(x);
@@ -282,6 +280,7 @@ inline int hard_decision(T x) {
   return symbols<QAM>[id];
 }
 
+// EPA iteration
 template <size_t QAM, typename T, size_t Tx>
 void EPA(MAT<T, 2 * Tx> const& A_EPA,
          VEC<T, 2 * Tx> const& b_EPA,
@@ -307,6 +306,7 @@ void EPA(MAT<T, 2 * Tx> const& A_EPA,
   }
 }
 
+// functions for bit sequences to symbols and error counting
 template <size_t QAM, typename T, size_t Tx>
 void line_sym_decision(VEC<T, 2 * Tx> const& t, VEC<T, 2 * Tx>& syms, std::string& bits) {
   int bit_per_sym = log2_floor<QAM>() / 2;

@@ -2363,6 +2363,15 @@ class Qu_s<dim<dims...>, Arg> {
   static constexpr size_t dimSize  = size::dimSize;
   using elem_t                     = Arg;
 
+  // begin与end
+  constexpr auto begin(){
+    return data.begin();
+  }
+
+  constexpr auto end(){
+    return data.end();
+  }
+
   // 构造函数
   constexpr Qu_s() {
     if constexpr (onHeap) {

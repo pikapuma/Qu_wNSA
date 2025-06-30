@@ -3,91 +3,71 @@
 
 #include "QuBLAS.h"
 
-#include <complex>
-#include <cstddef>
-
+// type alias
 template <typename Qu_scalar_t, size_t row, size_t col = row>
 using MAT = Qu<dim<row, col>, Qu_scalar_t>;
 
 template <typename Qu_scalar_t, size_t len>
 using VEC = Qu<dim<len>, Qu_scalar_t>;
 
-template <typename T>
-concept is_mat_v = requires(T const& vec) { vec[0][0]; } || requires(T const& vec) { vec[0, 0]; };
-
-template <typename T>
-concept is_vec_v = requires(T const& vec) { vec[0]; } && (!is_mat_v<T>);
-
-template <typename T>
-concept is_tensor_v = is_vec_v<T> || is_mat_v<T>;
-
+// complex conjugate
 template <typename complex_t>
 complex_t my_conj(complex_t const& in) {
   return {in.real, -in.imag};
 }
 
+// process a tensor elementwise
+// (maybe add begin() and end() to Qu tensor and use std::views::transform()?)
 template <typename T, size_t row, size_t col>
-  requires(!is_vec_v<T>)
-void elemwise(MAT<T, row, col> const& src, MAT<T, row, col>& result, auto&& pred) {
+void elemwise(MAT<T, row, col> const& src, MAT<T, row, col>& result, auto&& op) {
   for (int r = 0; r < row; ++r) {
     for (int c = 0; c < col; ++c) {
-      result[r, c] = pred(src[r, c]);
+      result[r, c] = op(src[r, c]);
     }
   }
 }
 
 template <typename T, size_t len>
-void complex_expand(VEC<std::complex<T>, len> const& src, VEC<T, 2 * len>& dest) {
-  for (size_t i = 0; i < len; ++i) {
-    dest[i]       = src[i].real;
-    dest[i + len] = src[i].imag;
+void elemwise(VEC<T, len> const& src, VEC<T, len>& result, auto&& op) {
+  for (size_t r = 0; r < len; ++r) {
+    result[r] = op(src[r]);
+  }
+}
+
+// process two tensors pairwise
+template <typename T, size_t row, size_t col>
+void pairwise(MAT<T, row, col> const& lhs, MAT<T, row, col> const& rhs, MAT<T, col>& result, auto&& op) {
+  for (size_t r = 0; r < row; ++r) {
+    for (size_t c = 0; c < col; ++c) {
+      result[r, c] = op(lhs[r, c], rhs[r, c]);
+    }
   }
 }
 
 template <typename T, size_t len>
-  requires(!is_vec_v<T>)
-void elemwise(VEC<T, len> const& src, VEC<T, len>& result, auto&& pred) {
+void pairwise(VEC<T, len> const& lhs, VEC<T, len> const& rhs, VEC<T, len>& result, auto&& op) {
   for (size_t r = 0; r < len; ++r) {
-    result[r] = pred(src[r]);
+    result[r] = op(lhs[r], rhs[r]);
+  }
+}
+
+template <typename T, size_t len>
+void pairwise(T const lhs, VEC<T, len> const& rhs, VEC<T, len>& result, auto&& op) {
+  for (size_t r = 0; r < len; ++r) {
+    result[r] = op(lhs, rhs[r]);
   }
 }
 
 template <typename T, size_t row, size_t col>
-  requires(!is_vec_v<T>)
-void pairwise(MAT<T, row, col> const& lhs, MAT<T, row, col> const& rhs, MAT<T, col>& result, auto&& pred) {
+void pairwise(T const lhs, MAT<T, row, col> const& rhs, MAT<T, col>& result, auto&& op) {
   for (size_t r = 0; r < row; ++r) {
     for (size_t c = 0; c < col; ++c) {
-      result[r, c] = pred(lhs[r, c], rhs[r, c]);
+      result[r, c] = op(lhs, rhs[r, c]);
     }
   }
 }
 
-template <typename T, size_t len>
-  requires(!is_vec_v<T>)
-void pairwise(VEC<T, len> const& lhs, VEC<T, len> const& rhs, VEC<T, len>& result, auto&& pred) {
-  for (size_t r = 0; r < len; ++r) {
-    result[r] = pred(lhs[r], rhs[r]);
-  }
-}
-
-template <typename T, size_t len>
-  requires(!is_vec_v<T>)
-void pairwise(T const lhs, VEC<T, len> const& rhs, VEC<T, len>& result, auto&& pred) {
-  for (size_t r = 0; r < len; ++r) {
-    result[r] = pred(lhs, rhs[r]);
-  }
-}
-
-template <typename T, size_t row, size_t col>
-  requires(!is_vec_v<T>)
-void pairwise(T const lhs, MAT<T, row, col> const& rhs, MAT<T, col>& result, auto&& pred) {
-  for (size_t r = 0; r < row; ++r) {
-    for (size_t c = 0; c < col; ++c) {
-      result[r, c] = pred(lhs, rhs[r, c]);
-    }
-  }
-}
-
+// matrix conjugate transpose multiplication
 template <typename T, size_t row, size_t col>
 void conj_mult(MAT<T, row, col> const& src, MAT<T, col>& result) {
   for (size_t r = 0; r < col; ++r) {
@@ -150,6 +130,7 @@ void conj_mult(MAT<src_t, row, col> const& src, MAT<res_t, col>& result) {
   }
 }
 
+// matrix multiplication
 template <typename T, size_t row1, size_t col1, size_t col2>
 void mat_mult(MAT<T, row1, col1> const& lhs, MAT<T, col1, col2> const& rhs, MAT<T, row1, col2>& result) {
   for (size_t r = 0; r < row1; ++r) {
@@ -178,7 +159,7 @@ void mat_mult(MAT<T, row, col> const& lhs, VEC<T, col> const& rhs, VEC<T, row>& 
   }
 }
 
-// μ(i+1) = b − W * μ(i)
+// wNSA iteration: μ(i+1) = b − (I-W) * μ(i)
 template <size_t len, typename T>
 void wNSA_iter(
     MAT<T, len> const& factor, VEC<T, len> const& constant, VEC<T, len> const& init, VEC<T, len>& dest, int iter_num) {
@@ -197,7 +178,7 @@ void wNSA_iter(
   }
 }
 
-// μ(i+1) = μ(i−1) + (b − W * μ(i)) + k * (μ(i) − μ(i−1))
+// secodn order iteration: μ(i+1) = μ(i−1) + (b − W * μ(i)) + k * (μ(i) − μ(i−1))
 template <typename T, size_t len>
 void second_order_iter(MAT<T, len> const& factor,    // W
                        VEC<T, len> const& constant,  // b
