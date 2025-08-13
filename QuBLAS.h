@@ -2364,11 +2364,11 @@ class Qu_s<dim<dims...>, Arg> {
   using elem_t                     = Arg;
 
   // begin与end
-  constexpr auto begin(){
+  constexpr auto begin() {
     return data.begin();
   }
 
-  constexpr auto end(){
+  constexpr auto end() {
     return data.end();
   }
 

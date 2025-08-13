@@ -68,47 +68,6 @@ void pairwise(T const lhs, MAT<T, row, col> const& rhs, MAT<T, col>& result, aut
 }
 
 // matrix conjugate transpose multiplication
-template <typename T, size_t row, size_t col>
-void conj_mult(MAT<T, row, col> const& src, MAT<T, col>& result) {
-  for (size_t r = 0; r < col; ++r) {
-    for (size_t c = 0; c <= r; ++c) {
-      VEC<T, row> tmp_mult;
-      for (size_t k = 0; k < row; ++k) {
-        tmp_mult[k] = my_conj(src[k, r]) * src[k, c];
-      }
-
-      result[r, c] = Qreduce<T>(tmp_mult);
-      result[c, r] = my_conj(result[r, c]);
-    }
-  }
-}
-
-template <typename T, size_t row1, size_t col1, size_t col2>
-void conj_mult(MAT<T, row1, col1> const& lhs, MAT<T, row1, col2> const& rhs, MAT<T, col1, col2>& result) {
-  for (size_t r = 0; r < col1; ++r) {
-    for (size_t c = 0; c < col2; ++c) {
-      VEC<T, row1> tmp_mult;
-      for (size_t k = 0; k < row1; ++k) {
-        tmp_mult[k] = my_conj(lhs[k, r]) * rhs[k, c];
-      }
-
-      result[r, c] = Qreduce<T>(tmp_mult);
-    }
-  }
-}
-
-template <typename T, size_t row, size_t col>
-void conj_mult(MAT<T, row, col> const& lhs, VEC<T, row> const& rhs, VEC<T, col>& result) {
-  for (size_t r = 0; r < col; ++r) {
-    VEC<T, row> tmp_mult;
-    for (size_t k = 0; k < row; ++k) {
-      tmp_mult[k] = my_conj(lhs[k, r]) * rhs[k];
-    }
-
-    result[r] = Qreduce<T>(tmp_mult);
-  }
-}
-
 template <typename src_t, typename res_t, size_t row, size_t col>
 void conj_mult(MAT<src_t, row, col> const& src, MAT<res_t, col>& result) {
   for (size_t r = 0; r < col; ++r) {
@@ -131,49 +90,52 @@ void conj_mult(MAT<src_t, row, col> const& src, MAT<res_t, col>& result) {
 }
 
 // matrix multiplication
-template <typename T, size_t row1, size_t col1, size_t col2>
-void mat_mult(MAT<T, row1, col1> const& lhs, MAT<T, col1, col2> const& rhs, MAT<T, row1, col2>& result) {
+template <typename res_T, typename tmp_t, size_t row1, size_t col1, size_t col2>
+void mat_mult(MAT<res_T, row1, col1> const& lhs, MAT<res_T, col1, col2> const& rhs, MAT<res_T, row1, col2>& result) {
   for (size_t r = 0; r < row1; ++r) {
     for (size_t c = 0; c < col2; ++c) {
-      VEC<T, col1> tmp_mult;
+      VEC<tmp_t, col1> tmp_mult;
 
       for (size_t k = 0; k < col1; ++k) {
         tmp_mult[k] = lhs[r, k] * rhs[k, c];
       }
 
-      result[r, c] = Qreduce<T>(tmp_mult);
+      result[r, c] = Qreduce<tmp_t>(tmp_mult);
     }
   }
 }
 
-template <typename T, size_t row, size_t col>
-void mat_mult(MAT<T, row, col> const& lhs, VEC<T, col> const& rhs, VEC<T, row>& result) {
+template <typename res_T, typename tmp_t, size_t row, size_t col>
+void mat_mult(MAT<res_T, row, col> const& lhs, VEC<res_T, col> const& rhs, VEC<res_T, row>& result) {
   for (size_t r = 0; r < row; ++r) {
-    VEC<T, col> tmp_mult;
+    VEC<tmp_t, col> tmp_mult;
 
     for (size_t c = 0; c < col; ++c) {
       tmp_mult[c] = lhs[r, c] * rhs[c];
     }
 
-    result[r] = Qreduce<T>(tmp_mult);
+    result[r] = Qreduce<tmp_t>(tmp_mult);
   }
 }
 
 // wNSA iteration: μ(i+1) = b − (I-W) * μ(i)
-template <size_t len, typename T>
-void wNSA_iter(
-    MAT<T, len> const& factor, VEC<T, len> const& constant, VEC<T, len> const& init, VEC<T, len>& dest, int iter_num) {
+template <size_t len, typename wNSA_T, typename tmp_t>
+void wNSA_iter(MAT<wNSA_T, len> const& factor,
+               VEC<wNSA_T, len> const& constant,
+               VEC<wNSA_T, len> const& init,
+               VEC<wNSA_T, len>& dest,
+               int iter_num) {
   dest = init;
-  MAT<T, len> one{};
+  MAT<wNSA_T, len> one{};
   for (size_t i = 0; i < len; ++i) {
     one[i, i] = 1;
   }
 
-  MAT<T, len> mult_mat = one - factor;
-  VEC<T, len> mult_res;
+  MAT<wNSA_T, len> mult_mat = one - factor;
+  VEC<wNSA_T, len> mult_res;
 
   for (int i = 0; i < iter_num; ++i) {
-    mat_mult<T, len, len>(mult_mat, dest, mult_res);
+    mat_mult<wNSA_T, tmp_t, len, len>(mult_mat, dest, mult_res);
     dest = constant + mult_res;
   }
 }

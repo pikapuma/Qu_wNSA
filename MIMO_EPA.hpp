@@ -157,7 +157,7 @@ std::string sym2bit(int sym, bool is_real) {
 }
 
 // MIMO system, y=H*x+n
-template <size_t Tx, size_t Rx, size_t QAM, typename H_t, typename y_t>
+template <size_t Tx, size_t Rx, size_t QAM, typename H_t, typename H_RND_t, typename y_t, typename y_RND_t>
 void MIMO_system(MAT<Qu<H_t, H_t>, Rx, Tx>& H,
                  VEC<Qu<y_t, y_t>, Rx>& y,
                  std::array<std::complex<double>, Tx>& x,
@@ -173,10 +173,14 @@ void MIMO_system(MAT<Qu<H_t, H_t>, Rx, Tx>& H,
   std::array<std::array<complex, Tx>, Rx> H_full{};
   std::array<complex, Rx> y_full{};
 
+  Qu<H_RND_t, H_RND_t> H_tmp;
+  Qu<y_RND_t, y_RND_t> y_tmp;
+
   for (size_t r = 0; r < Rx; ++r) {
     for (size_t c = 0; c < Tx; ++c) {
       H_full[r][c] = complex{normal(generator) * std::sqrt(0.5), normal(generator) * std::sqrt(0.5)};
-      H[r, c]      = H_full[r][c];
+      H_tmp        = H_full[r][c];
+      H[r, c]      = H_tmp;
     }
   }
 
@@ -196,7 +200,8 @@ void MIMO_system(MAT<Qu<H_t, H_t>, Rx, Tx>& H,
       y_full[r] += H_full[r][c] * x[c];
     }
 
-    y[r] = y_full[r];
+    y_tmp = y_full[r];
+    y[r]  = y_tmp;
   }
 }
 
@@ -208,55 +213,81 @@ template <size_t Tx,
           typename A_full_prec_t,
           typename A_diag_t,
           typename A_off_t,
+          typename Dinv_t,
+          typename buffer_t,
+          typename b_full_prec_t,
           typename b_t,
-          typename iter_t>
+          typename b_Es_t,
+          typename wNSA_iter_t,
+          typename EPA_iter_t>
 void init_params_wNSA(MAT<Qu<H_t, H_t>, Rx, Tx> const& H,
                       VEC<Qu<y_t, y_t>, Rx> const& y,
-                      MAT<iter_t, 2 * Tx>& A_wNSA,
-                      VEC<iter_t, 2 * Tx>& b_wNSA,
-                      MAT<iter_t, 2 * Tx>& A_EPA,
-                      VEC<iter_t, 2 * Tx>& b_EPA,
-                      iter_t k,
+                      MAT<buffer_t, 2 * Tx>& A_wNSA,
+                      VEC<wNSA_iter_t, 2 * Tx>& b_wNSA,
+                      MAT<buffer_t, 2 * Tx>& A_EPA,
+                      VEC<EPA_iter_t, 2 * Tx>& b_EPA,
+                      wNSA_iter_t k,
                       b_t sqrt_Es0,
                       A_diag_t alpha) {
   MAT<Qu<A_full_prec_t, A_full_prec_t>, Tx> A_full_prec{};
   VEC<Qu<b_t, b_t>, Tx> b{};
 
   conj_mult<Qu<H_t, H_t>, Qu<A_full_prec_t, A_full_prec_t>, Rx, Tx>(H, A_full_prec);
-
-  for (size_t r = 0; r < Tx; ++r) {
-    for (size_t _k = 0; _k < Rx; ++_k) {
-      auto tmp = Qmul<BasicComplexMul<acT<b_t>, bdT<b_t>, adT<b_t>, bcT<b_t>, acbdT<b_t>, adbcT<b_t>>>(
-          my_conj(H[_k, r]), y[_k]);
-
-      b[r] += tmp;
+  for (size_t r = 0; r < Tx; r = r + 1) {
+    for (size_t c = 0; c < Tx; c = c + 1) {
+      if (r != c) {
+        A_full_prec[r, c] = A_full_prec[r, c] + Qu<A_full_prec_t, A_full_prec_t>{1 / 8, 1 / 8};
+      }
     }
+  }
+
+  Qu<b_full_prec_t, b_full_prec_t> b_tmp;
+  for (size_t r = 0; r < Tx; ++r) {
+    b_tmp = 0;
+
+    for (size_t _k = 0; _k < Rx; ++_k) {
+      b_tmp += Qmul<BasicComplexMul<acT<b_full_prec_t>,
+                                    bdT<b_full_prec_t>,
+                                    adT<b_full_prec_t>,
+                                    bcT<b_full_prec_t>,
+                                    acbdT<b_full_prec_t>,
+                                    adbcT<b_full_prec_t>>>(my_conj(H[_k, r]), y[_k]);
+    }
+
+    b[r] = b_tmp + Qu<b_full_prec_t, b_full_prec_t>{1 / 32, 1 / 32};
   }
 
   for (size_t r = 0; r < Tx; ++r) {
     A_diag_t diag_elem = A_diag_t(A_full_prec[r, r].real) + alpha;
 
-    int64_t dividend = 1UZ << (A_diag_t::fracB + iter_t::fracB);
-    int64_t divisor  = diag_elem.toDouble() * std::pow(2, A_diag_t::fracB);
-    int64_t quot     = dividend / divisor;
-    iter_t diag_inv  = 1.0 * quot / std::pow(2, iter_t::fracB);
+    int64_t dividend  = 1UZ << (A_diag_t::fracB + Dinv_t::fracB);
+    int64_t divisor   = diag_elem.toDouble() * std::pow(2, A_diag_t::fracB);
+    int64_t quot      = dividend / divisor;
+    Dinv_t diag_inv   = 1.0 * quot / std::pow(2, Dinv_t::fracB);
+    Dinv_t k_diag_inv = k * diag_inv;
 
-    b_EPA[r]      = Qmul<iter_t>(Qmul<b_t>(b[r].real, sqrt_Es0), diag_inv);
-    b_EPA[r + Tx] = Qmul<iter_t>(Qmul<b_t>(b[r].imag, sqrt_Es0), diag_inv);
+    b_wNSA[r]      = Qmul<wNSA_iter_t>(Qmul<b_Es_t>(b[r].real, sqrt_Es0), k_diag_inv);
+    b_wNSA[r + Tx] = Qmul<wNSA_iter_t>(Qmul<b_Es_t>(b[r].imag, sqrt_Es0), k_diag_inv);
 
-    b_wNSA[r]      = b_EPA[r] * k;
-    b_wNSA[r + Tx] = b_EPA[r + Tx] * k;
+    b_EPA[r]      = Qmul<EPA_iter_t>(Qmul<b_Es_t>(b[r].real, sqrt_Es0), diag_inv);
+    b_EPA[r + Tx] = Qmul<EPA_iter_t>(Qmul<b_Es_t>(b[r].imag, sqrt_Es0), diag_inv);
 
     for (size_t c = 0; c < Tx; ++c) {
-      iter_t div_real;
-      iter_t div_imag;
+      buffer_t div_real;
+      buffer_t div_imag;
+      buffer_t k_div_real;
+      buffer_t k_div_imag;
 
       if (r == c) {
-        div_real = A_diag_t(A_full_prec[r, c].real) * diag_inv;
-        div_imag = A_diag_t(A_full_prec[r, c].imag) * diag_inv;
+        div_real   = A_diag_t(A_full_prec[r, c].real) * diag_inv;
+        div_imag   = A_diag_t(A_full_prec[r, c].imag) * diag_inv;
+        k_div_real = A_diag_t(A_full_prec[r, c].real) * k_diag_inv;
+        k_div_imag = A_diag_t(A_full_prec[r, c].imag) * k_diag_inv;
       } else {
-        div_real = A_off_t(A_full_prec[r, c].real) * diag_inv;
-        div_imag = A_off_t(A_full_prec[r, c].imag) * diag_inv;
+        div_real   = A_off_t(A_full_prec[r, c].real) * diag_inv;
+        div_imag   = A_off_t(A_full_prec[r, c].imag) * diag_inv;
+        k_div_real = A_off_t(A_full_prec[r, c].real) * k_diag_inv;
+        k_div_imag = A_off_t(A_full_prec[r, c].imag) * k_diag_inv;
       }
 
       A_EPA[r, c]           = div_real;
@@ -264,10 +295,10 @@ void init_params_wNSA(MAT<Qu<H_t, H_t>, Rx, Tx> const& H,
       A_EPA[r + Tx, c]      = div_imag;
       A_EPA[r + Tx, c + Tx] = div_real;
 
-      A_wNSA[r, c]           = A_EPA[r, c] * k;
-      A_wNSA[r, c + Tx]      = A_EPA[r, c + Tx] * k;
-      A_wNSA[r + Tx, c]      = A_EPA[r + Tx, c] * k;
-      A_wNSA[r + Tx, c + Tx] = A_EPA[r + Tx, c + Tx] * k;
+      A_wNSA[r, c]           = k_div_real;
+      A_wNSA[r, c + Tx]      = -k_div_imag;
+      A_wNSA[r + Tx, c]      = k_div_imag;
+      A_wNSA[r + Tx, c + Tx] = k_div_real;
     }
   }
 }
@@ -281,13 +312,13 @@ inline int hard_decision(T x) {
 }
 
 // EPA iteration
-template <size_t QAM, typename T, size_t Tx>
-void EPA(MAT<T, 2 * Tx> const& A_EPA,
-         VEC<T, 2 * Tx> const& b_EPA,
-         VEC<T, 2 * Tx> const& mu,
-         VEC<T, 2 * Tx>& t,
+template <size_t QAM, typename EPA_t, typename tmp_t, size_t Tx>
+void EPA(MAT<EPA_t, 2 * Tx> const& A_EPA,
+         VEC<EPA_t, 2 * Tx> const& b_EPA,
+         VEC<EPA_t, 2 * Tx> const& mu,
+         VEC<EPA_t, 2 * Tx>& t,
          size_t iter_num) {
-  using vec_t = VEC<T, 2 * Tx>;
+  using vec_t = VEC<EPA_t, 2 * Tx>;
 
   t = mu;
   vec_t eta{};
@@ -299,10 +330,10 @@ void EPA(MAT<T, 2 * Tx> const& A_EPA,
       eta[r] = hard_decision<QAM>(t[r]);
     }
 
-    mat_mult<T, 2 * Tx, 2 * Tx>(A_EPA, eta, mult_res);
+    mat_mult<EPA_t, tmp_t, 2 * Tx, 2 * Tx>(A_EPA, eta, mult_res);
 
     t = vec_t(vec_t(b_EPA - mult_res) + eta) + t;
-    t = t * T(0.5);
+    t = t * EPA_t(0.5);
   }
 }
 
