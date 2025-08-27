@@ -29,23 +29,23 @@ constexpr size_t A_OFF_FRAC_WIDTH  = 8;
 constexpr size_t A_FULL_FRAC_WIDTH = 10;
 constexpr size_t A_FULL_DATA_WIDTH
     = A_FULL_FRAC_WIDTH + std::max(A_DIAG_DATA_WIDTH - A_DIAG_FRAC_WIDTH, A_OFF_DATA_WIDTH - A_OFF_FRAC_WIDTH);
-constexpr size_t Dinv_DATA_WIDTH = 14;
+constexpr size_t Dinv_DATA_WIDTH = 12;
 constexpr size_t Dinv_FRAC_WIDTH = 14;
 
-constexpr size_t b_DATA_WIDTH      = 15;
-constexpr size_t b_FRAC_WIDTH      = 5;
+constexpr size_t b_DATA_WIDTH      = 14;
+constexpr size_t b_FRAC_WIDTH      = 4;
 constexpr size_t b_FULL_FRAC_WIDTH = 8;
 constexpr size_t b_FULL_DATA_WIDTH = b_DATA_WIDTH + b_FULL_FRAC_WIDTH - b_FRAC_WIDTH;
-constexpr size_t b_Es_DATA_WIDTH   = 15;
-constexpr size_t b_Es_FRAC_WIDTH   = 3;
+constexpr size_t b_Es_DATA_WIDTH   = 14;
+constexpr size_t b_Es_FRAC_WIDTH   = 2;
 
-constexpr size_t BUFFER_DATA_WIDTH = 16;
-constexpr size_t BUFFER_FRAC_WIDTH = 14;
-constexpr size_t GEM_DATA_WIDTH    = 20;
-constexpr size_t GEM_FRAC_WIDTH    = 14;
-constexpr size_t wNSA_DATA_WIDTH   = 18;
-constexpr size_t wNSA_FRAC_WIDTH   = 12;
-constexpr size_t EPA_DATA_WIDTH    = 16;
+constexpr size_t BUFFER_DATA_WIDTH = 14;
+constexpr size_t BUFFER_FRAC_WIDTH = 12;
+constexpr size_t GEM_DATA_WIDTH    = 17;
+constexpr size_t GEM_FRAC_WIDTH    = 12;
+constexpr size_t wNSA_DATA_WIDTH   = 15;
+constexpr size_t wNSA_FRAC_WIDTH   = 10;
+constexpr size_t EPA_DATA_WIDTH    = 15;
 constexpr size_t EPA_FRAC_WIDTH    = 10;
 
 using H_t           = fixed_t<H_DATA_WIDTH, H_FRAC_WIDTH>;
@@ -74,18 +74,22 @@ using y_RND_t = Qu<isSigned<true>,
                    QuMode<RND::ZERO>,
                    OfMode<WRP::TCPL>>;
 
-constexpr size_t Tx            = 32;
+constexpr size_t Tx            = 16;
 constexpr size_t Rx            = 64;
 constexpr size_t QAM           = 64;
-constexpr size_t wNSA_ITER_NUM = 20;
+constexpr size_t wNSA_ITER_NUM = 10;
 constexpr size_t EPA_ITER_NUM  = 5;
-constexpr size_t test_num      = 4000;
+constexpr size_t test_num      = 40000;
 
 constexpr double SNR = 18;
 constexpr double TxE = Tx * Rx;
 double const Nv      = TxE / (std::pow(10, SNR / 10) * std::log2(QAM) * Tx);
 double const Nv_r    = Nv / 2;
-constexpr wNSA_t w   = 0.6;
+
+double const lambda_max = std::pow((1 + std::sqrt(1.0 * Tx / Rx)), 2);
+double const lambda_min = std::pow((1 - std::sqrt(1.0 * Tx / Rx)), 2);
+double const w_double   = 2 / (lambda_min + lambda_max);
+wNSA_t const w          = w_double;
 
 wNSA_t const sqrt_Es0 = std::sqrt(get_Es0<QAM>());
 
